@@ -114,6 +114,8 @@ class PromptQuitDialog(gtk.MessageDialog):
 
 class Guake(SimpleGladeApp):
 
+    tab_width = 150
+
     """Guake main class. Handles specialy the main window.
     """
 
@@ -131,6 +133,7 @@ class Guake(SimpleGladeApp):
         self.isPromptQuitDialogOpened = False
         self.hidden = True
         self.forceHide = False
+        self.tabs_list = []
 
         # trayicon!
         try:
@@ -564,7 +567,7 @@ class Guake(SimpleGladeApp):
             # Reapply the tab color to all button in the tab list, since at least one don't have the
             # select color set. This needs to happen AFTER the first show_all, since before the gtk
             # has not loaded the right colors yet.
-            for tab in self.tabs.get_children():
+            for tab in self.tabs_list:
                 if isinstance(tab, gtk.RadioButton):
                     tab.modify_bg(gtk.STATE_ACTIVE, gtk.gdk.Color(str(self.selected_color)))
 
@@ -578,6 +581,8 @@ class Guake(SimpleGladeApp):
             time = gtk.gdk.x11_get_server_time(self.window.window)
         except AttributeError:
             time = 0
+
+        self.tabs.resize(1, window_rect.width // self.tab_width)
 
         self.window.window.show()
         self.window.window.focus(time)
@@ -851,7 +856,7 @@ class Guake(SimpleGladeApp):
         key.
         """
         pagepos = self.notebook.get_current_page()
-        self.selected_tab = self.tabs.get_children()[pagepos]
+        self.selected_tab = self.tabs_list[pagepos]
         self.on_rename_current_tab_activate()
         return True
 
@@ -935,7 +940,7 @@ class Guake(SimpleGladeApp):
         if not use_them:
             return
         page = self.notebook.page_num(box)
-        tab = self.tabs.get_children()[page]
+        tab = self.tabs_list[page]
         # if tab has been renamed by user, don't override.
         if not getattr(tab, 'custom_label_set', False):
             tab.set_label(vte.get_window_title())
@@ -987,8 +992,7 @@ class Guake(SimpleGladeApp):
     def on_close_activate(self, *args):
         """Tab context menu close handler
         """
-        tabs = self.tabs.get_children()
-        pagepos = tabs.index(self.selected_tab)
+        pagepos = self.tabs_list.index(self.selected_tab)
         self.delete_tab(pagepos)
 
     def on_drag_data_received(self, widget, context,
@@ -1043,7 +1047,7 @@ class Guake(SimpleGladeApp):
         """Rename an already added tab by its index.
         """
         try:
-            tab = self.tabs.get_children()[tab_index]
+            tab = self.tabs_list[tab_index]
         except IndexError:
             pass
         else:
@@ -1058,7 +1062,7 @@ class Guake(SimpleGladeApp):
         button and change its label to `new_text'.
         """
         pagepos = self.notebook.get_current_page()
-        self.selected_tab = self.tabs.get_children()[pagepos]
+        self.selected_tab = self.tabs_list[pagepos]
         self.selected_tab.set_label(new_text)
 
         # it's hard to pass an empty string as a command line argument,
@@ -1189,8 +1193,7 @@ class Guake(SimpleGladeApp):
 
         # Adding a new radio button to the tabbar
         label = box.terminal.get_window_title() or _("Terminal")
-        tabs = self.tabs.get_children()
-        parent = tabs and tabs[0] or None
+        parent = self.tabs_list and self.tabs_list[0] or None
 
         bnt = gtk.RadioButton(group=parent, label=label, use_underline=False)
         bnt.set_property('can-focus', False)
@@ -1201,6 +1204,7 @@ class Guake(SimpleGladeApp):
                     lambda *x: self.notebook.set_current_page(
                         self.notebook.page_num(box)
                     ))
+        bnt.set_size_request(self.tab_width, -1)
         if self.selected_color is not None:
             bnt.modify_bg(gtk.STATE_ACTIVE, gtk.gdk.Color(str(self.selected_color)))
         drag_drop_type = ("text/plain", gtk.TARGET_SAME_APP, 80)
@@ -1210,8 +1214,9 @@ class Guake(SimpleGladeApp):
         bnt.connect("drag_data_get", self.on_drag_tab)
         bnt.show()
 
-        self.tabs.pack_start(bnt, expand=False, padding=1)
-
+        self.add_tab_to_panel_by_index(bnt, len(self.tabs_list))
+        self.tabs_list.append(bnt)
+        
         self.notebook.append_page(box, None)
         self.notebook.set_current_page(self.notebook.page_num(box))
         box.terminal.grab_focus()
@@ -1221,24 +1226,37 @@ class Guake(SimpleGladeApp):
             self.fullscreen()
 
     def on_drag_tab(self, widget, context, selection, targetType, eventTime):
-        tab_pos = self.tabs.get_children().index(widget)
-        selection.set(selection.target, 32, str(tab_pos))
+        pass
+        # tab_pos = self.tabs_list.index(widget)
+        # selection.set(selection.target, 32, str(tab_pos))
 
     def on_drop_tab(self, widget, context, x, y, selection, targetType, data):
-        old_tab_pos = int(selection.get_text())
-        new_tab_pos = self.tabs.get_children().index(widget)
-        self.move_tab(old_tab_pos, new_tab_pos)
+        pass
+        # old_tab_pos = int(selection.get_text())
+        # new_tab_pos = self.tabs_list.index(widget)
+        # self.move_tab(old_tab_pos, new_tab_pos)
 
     def move_tab(self, old_tab_pos, new_tab_pos):
-        self.notebook.reorder_child(self.notebook.get_nth_page(old_tab_pos), new_tab_pos)
-        self.tabs.reorder_child(self.tabs.get_children()[old_tab_pos], new_tab_pos)
+        pass
+        # self.notebook.reorder_child(self.notebook.get_nth_page(old_tab_pos), new_tab_pos)
+        # self.tabs.reorder_child(self.tabs.get_children()[old_tab_pos], new_tab_pos)
 
     def delete_tab(self, pagepos, kill=True):
         """This function will destroy the notebook page, terminal and
         tab widgets and will call the function to kill interpreter
         forked by vte.
         """
-        self.tabs.get_children()[pagepos].destroy()
+        # Remove tab from list
+        child = self.tabs_list[pagepos]
+        self.tabs_list.remove(child)
+        # Clear tabs panel
+        for child in self.tabs:
+            self.tabs.remove(child)
+        # Add tabs to panel without removed tab
+        index = 0
+        for child in self.tabs_list:
+            self.add_tab_to_panel_by_index(child, index)
+            index += 1
         self.notebook.delete_tab(pagepos, kill=kill)
 
         if not self.notebook.has_term():
@@ -1256,13 +1274,13 @@ class Guake(SimpleGladeApp):
         made with radio buttons must be updated and this method does
         this work.
         """
-        self.tabs.get_children()[page].set_active(True)
+        self.tabs_list[page].set_active(True)
 
     def select_tab(self, tab_index):
         """Select an already added tab by its index.
         """
         try:
-            self.tabs.get_children()[tab_index].set_active(True)
+            self.tabs_list[tab_index].set_active(True)
             return tab_index
         except IndexError:
             pass
@@ -1272,7 +1290,7 @@ class Guake(SimpleGladeApp):
         self.selected_tab var.
         """
         pagepos = self.notebook.get_current_page()
-        self.selected_tab = self.tabs.get_children()[pagepos]
+        self.selected_tab = self.tabs_list[pagepos]
         return pagepos
 
     def search_on_web(self, *args):
@@ -1297,3 +1315,10 @@ class Guake(SimpleGladeApp):
         else:
             self.mainframe.reorder_child(self.notebook, 0)
         self.mainframe.pack_start(self.mainframe, expand=True, fill=True, padding=0)
+
+    def get_position_in_table(self, index):
+        return divmod(index, self.tabs.get_property('n-columns'))
+
+    def add_tab_to_panel_by_index(self, tab, index):
+        position = self.get_position_in_table(index)
+        self.tabs.attach(tab, left_attach=position[1], right_attach=position[1] + 1, top_attach=position[0], bottom_attach=position[0] + 1, xoptions=0)
